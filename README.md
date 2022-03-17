@@ -8,8 +8,12 @@
 
 ### Testing
 
+```
+make test
+```
+
 ### Linting
 
-## Usage
-
-### Log Levels
+```
+make lint
+```
