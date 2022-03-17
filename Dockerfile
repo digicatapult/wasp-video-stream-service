@@ -1,4 +1,3 @@
-
 FROM golang:1.17-alpine AS build
 
 WORKDIR /wasp-video-stream-service
