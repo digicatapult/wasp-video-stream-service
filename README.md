@@ -1,4 +1,4 @@
-# wasp-ingest-rtmp
+# wasp-video-stream-service
 
 ## Getting Started
 
