@@ -6,6 +6,10 @@
 
 ### Building
 
+```
+make build
+```
+
 ### Testing
 
 ```
@@ -16,4 +20,10 @@ make test
 
 ```
 make lint
+```
+
+### Cleanbuild
+
+```
+make cleanbuild
 ```
