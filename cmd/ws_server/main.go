@@ -12,7 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"github.com/digicatapult/wasp-ingest-rtmp/services"
+	"github.com/digicatapult/wasp-video-stream-service/services"
 )
 
 func main() {

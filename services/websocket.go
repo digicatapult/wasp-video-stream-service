@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	uuid "github.com/satori/go.uuid"
 	ffmpeg "github.com/u2takey/ffmpeg-go"
 	"go.uber.org/zap"
 )
@@ -18,8 +19,9 @@ func ChunksToWebsocket(rtmpURL string) {
 
 	shutdown := make(chan bool)
 	videoChunks := make(chan []byte, 10000)
+	chunkCount = map[string]int{}
 
-	// go sendVideoChunks()
+	go sendVideoChunks(videoChunks)
 	go readByteBufferToChannel(pipeReader, 1000, videoChunks, videoSendWaitGroup)
 
 	done := make(chan error)
@@ -48,18 +50,19 @@ var (
 )
 
 func sendVideoChunks(videoChunks chan []byte) {
-	// zap.S().Info("waiting for read")
+	chunkCount := 0
 	for {
 		select {
 		case chunk := <-videoChunks:
-			// 	zap.S().Infof("clients: %d", len(clients))
+			if chunkCount%100 == 0 {
+				zap.S().Infof("chunks forwarded: %d", chunkCount)
+			}
 			for _, c := range clients {
 				c.Messages <- chunk
 			}
-			return
+			chunkCount++
 		}
 	}
-	// zap.S().Info("leaving")
 }
 
 func readByteBufferToChannel(reader io.Reader, bufferSize int, bufferChannel chan []byte, waitGroup *sync.WaitGroup) {
@@ -68,7 +71,9 @@ func readByteBufferToChannel(reader io.Reader, bufferSize int, bufferChannel cha
 	buf := make([]byte, frameSize)
 
 	for {
-		// zap.S().Info("reading buffer")
+		if frameCount%100 == 0 {
+			zap.S().Infof("frames consumed: %d", frameCount)
+		}
 		count, err := io.ReadFull(reader, buf)
 		frameCount++
 
@@ -90,11 +95,8 @@ func readByteBufferToChannel(reader io.Reader, bufferSize int, bufferChannel cha
 		bufCopy := make([]byte, frameSize)
 		copy(bufCopy, buf)
 
-		// waitGroup.Add(1)
-		// zap.S().Info("queing the buffer")
+		waitGroup.Add(1)
 		bufferChannel <- bufCopy
-		sendVideoChunks(bufferChannel)
-		// time.Sleep(100)
 
 	}
 }
@@ -130,6 +132,7 @@ func HandleWs(w http.ResponseWriter, r *http.Request) {
 	// }
 
 	client := &WsHandlerClient{
+		ID:         uuid.NewV4().String(),
 		Messages:   make(chan []byte),
 		Conn:       conn,
 		UserAgent:  r.UserAgent(),
@@ -137,6 +140,7 @@ func HandleWs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clients = append(clients, client)
+	chunkCount[client.ID] = 0
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
@@ -150,6 +154,7 @@ type WsHandlerClient struct {
 	Conn       *websocket.Conn
 	UserAgent  string // r.UserAgent()
 	RemoteAddr string // r.Header.Get("X-Forwarded-For")
+	ID         string
 }
 
 const (
@@ -197,6 +202,8 @@ func (c *WsHandlerClient) readPump() {
 	}
 }
 
+var chunkCount map[string]int
+
 // writePump pumps messages from the hub to the websocket connection.
 //
 // A goroutine running writePump is started for each connection. The
@@ -222,9 +229,9 @@ func (c *WsHandlerClient) writePump(closed <-chan bool) {
 			if err != nil {
 				return
 			}
-			zap.S().Info("writing chunk")
 
 			w.Write(chunk)
+			chunkCount[c.ID]++
 
 			size := len(chunk)
 
@@ -235,10 +242,14 @@ func (c *WsHandlerClient) writePump(closed <-chan bool) {
 				followOnMessage := <-c.Messages
 				w.Write(followOnMessage)
 				size += len(followOnMessage)
+				chunkCount[c.ID]++
 			}
 
 			if err := w.Close(); err != nil {
 				return
+			}
+			if chunkCount[c.ID]%100 == 0 {
+				zap.S().Infof("chunks sent to client '%s': %d", c.ID, chunkCount[c.ID])
 			}
 		case <-ticker.C:
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
