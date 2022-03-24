@@ -1,48 +1,63 @@
-<!DOCTYPE html>
 <html>
 <head>
-    <meta charset="utf-8"/>
 </head>
 <body>
-<video controls muted></video>
+<video id="video" autoPlay="true" muted="muted"></video>
 <script>
-    const video = document.querySelector('video');
-    const assetURL = 'ws://localhost:9999/ws';
+function ready() {
+    const video = document.getElementById("video");
+    const ws = new WebSocket('ws://localhost:9999/ws');
     const mimeCodec = 'video/mp4; codecs="avc1.64001e, mp4a.40.2"';
+    const arrayOfBlobs = [];
+    const mediaSource = new MediaSource();
 
-    if ('MediaSource' in window && MediaSource.isTypeSupported(mimeCodec)) {
-        const mediaSource = new MediaSource();
+    const url = URL.createObjectURL(mediaSource);
+    video.src = url;
 
-        video.src = URL.createObjectURL(mediaSource);
-        mediaSource.addEventListener('sourceopen', sourceOpen);
-    } else {
-        console.error('Unsupported MIME type or codec: ', mimeCodec);
+    let sourceBuffer = null;
+    mediaSource.addEventListener("sourceopen", function () {
+        video.play();
+
+        sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+        sourceBuffer.addEventListener("update", appendToSourceBuffer);
+    });
+
+    function appendToSourceBuffer() {
+        if (arrayOfBlobs.length > 0 && !arrayOfBlobs.updating) {
+            arrayOfBlobs.appendBuffer(arrayOfBlobs.shift());
+        }
     }
 
-    function sourceOpen (_) {
-        const mediaSource = this;
-        const sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+    ws.onopen = () => {
+        ws.onmessage = (event) => {
+            const videoUrl = window.URL.createObjectURL(event.data);
 
-        fetchChunk(assetURL, function (buf) {
-            sourceBuffer.addEventListener('updateend', function (_) {
-                mediaSource.endOfStream(); // unsure on the impact this call for streaming vs file
-                video.play();
+            get(videoUrl, (buffer) => {
+                if (buffer && buffer.length > 0) {
+                    arrayOfBlobs.append(buffer);
+
+                    appendToSourceBuffer();
+                }
             });
-            sourceBuffer.appendBuffer(buf);
-        });
-    };
+        }
+    }
 
-    function fetchChunk (url, cb) {
-        console.log('fetchChunk url', url);
-        const xhr = new XMLHttpRequest;
-
-        xhr.open('get', url);
+    function get(url, callback) {
+        const xhr = new XMLHttpRequest();
+        xhr.open('get', url, true);
         xhr.responseType = 'arraybuffer';
-        xhr.onload = function () {
-            cb(xhr.response);
-        };
         xhr.send();
-    };
+
+        xhr.onload = () => {
+            callback(xhr.response);
+        };
+    }
+}
+
+window.addEventListener("DOMContentLoaded", function () {
+    console.log("Loaded");
+    ready();
+});
 </script>
 </body>
 </html>
