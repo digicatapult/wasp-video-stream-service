@@ -6,9 +6,6 @@ const (
 	// InTopicNameKey defines the environment variable key for InTopicName
 	InTopicNameKey = "IN_TOPIC_NAME_KEY"
 
-	// OutTopicNameKey defines the environment variable key for OutTopicName
-	OutTopicNameKey = "OUT_TOPIC_NAME_KEY"
-
 	// KafkaBrokersKey defines the environment variable key for KafkaBrokers
 	KafkaBrokersKey = "KAFKA_BROKERS"
 
