@@ -18,33 +18,7 @@ func main() {
 	kafkaBrokersVar := util.GetEnv(util.KafkaBrokersKey, "localhost:9092")
 	kafkaBrokers := strings.Split(kafkaBrokersVar, ",")
 
-	cfg := zap.NewDevelopmentConfig()
-	if util.GetEnv(util.EnvKey, "") == "production" {
-		cfg = zap.NewProductionConfig()
-
-		lvl, err := zap.ParseAtomicLevel(util.GetEnv(util.LogLevelKey, "debug"))
-		if err != nil {
-			panic("invalid log level")
-		}
-
-		log.Printf("setting level: %s", lvl.String())
-
-		cfg.Level = lvl
-	}
-
-	logger, err := cfg.Build()
-	if err != nil {
-		panic("error initializing the logger")
-	}
-
-	defer func() {
-		syncErr := logger.Sync()
-		if err != nil {
-			log.Printf("error whilst syncing zap: %s\n", syncErr)
-		}
-	}()
-
-	zap.ReplaceGlobals(logger)
+	util.ConfigureLogging()
 
 	sarama.Logger = util.SaramaZapLogger{}
 
