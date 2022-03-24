@@ -70,7 +70,7 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 	// new goroutines.
 	// TODO add close channel
 	// go client.writePump(app.closed)
-	go client.writePump(nil)
+	go client.writePump()
 	go client.readPump()
 }
 
@@ -91,27 +91,36 @@ type WsHandlerClient struct {
 // reads from this goroutine.
 func (c *WsHandlerClient) readPump() {
 	defer func() {
-		// TODO close message channel
-		// c.Messages.Hub.Unregister <- c.Messages
+		// close when we leave this function
+		// (in the event of an error or connection closing)
+		close(c.Messages)
 		c.Conn.Close()
 	}()
 	c.Conn.SetReadLimit(maxMessageSize)
-	c.Conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.Conn.SetPongHandler(func(string) error { c.Conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+
+	if err := c.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		zap.S().Errorf("problem setting read deadline: %s", err)
+		return
+	}
+
+	c.Conn.SetPongHandler(func(string) error {
+		if err := c.Conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+			zap.S().Warnf("problem setting read deadline in pong handler: %s", err)
+			return err
+		}
+		return nil
+	})
+
 	for {
 		// TODO Decide on reader implementation
-		//
-		// mt, data, err := c.Conn.ReadMessage()
-		// if err != nil {
-		// 	if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-		// 		log.Errorf("error: %v", err)
-		// 	}
-		// 	break
-		// }
-
-		// t := time.Now()
-
-		// c.Messages.Hub.Broadcast <- hub.Message{Sender: *c.Messages, Data: data, Type: mt, Sent: t}
+		mt, data, err := c.Conn.ReadMessage()
+		if err != nil {
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				zap.S().Errorf("error: %v", err)
+			}
+			break
+		}
+		zap.S().With("type", mt, "data", data).Debug("received a client message that are unhandled")
 	}
 }
 
@@ -120,7 +129,7 @@ func (c *WsHandlerClient) readPump() {
 // A goroutine running writePump is started for each connection. The
 // application ensures that there is at most one writer to a connection by
 // executing all writes from this goroutine.
-func (c *WsHandlerClient) writePump(closed <-chan struct{}) {
+func (c *WsHandlerClient) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
@@ -128,21 +137,33 @@ func (c *WsHandlerClient) writePump(closed <-chan struct{}) {
 	}()
 	for {
 		select {
-		case chunk := <-c.Messages:
+		// TODO Test channel closing behaviour
+		case chunk, ok := <-c.Messages:
 			// TODO investigate write deadlines
-			// c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
-			// if !ok {
-			// 	// The hub closed the channel.
-			// 	c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
-			// 	return
-			// }
-
-			w, err := c.Conn.NextWriter(websocket.BinaryMessage)
-			if err != nil {
+			if err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				zap.S().Errorf("problem setting write deadline; exiting writer: %s", err)
 				return
 			}
 
-			w.Write(chunk)
+			if !ok {
+				// The hub closed the channel.
+				if err := c.Conn.WriteMessage(websocket.CloseMessage, []byte{}); err != nil {
+					zap.S().Warnf("problem write close message: %s", err)
+					return
+				}
+				zap.S().Debugf("message channel closed, exiting write goroutine")
+				return
+			}
+
+			w, err := c.Conn.NextWriter(websocket.BinaryMessage)
+			if err != nil {
+				zap.S().Warnf("problem obtaining next writer; exiting write goroutine: %s", err)
+				return
+			}
+
+			if _, err := w.Write(chunk); err != nil {
+				zap.S().Warnf("problem writing chunk: %s", err)
+			}
 			c.ChunkCount++
 
 			size := len(chunk)
@@ -152,25 +173,29 @@ func (c *WsHandlerClient) writePump(closed <-chan struct{}) {
 			for i := 0; i < n; i++ {
 				zap.S().Debug("writing follow up")
 				followOnMessage := <-c.Messages
-				w.Write(followOnMessage)
+				if _, err := w.Write(followOnMessage); err != nil {
+					zap.S().Warnf("problem writing followup chunk: %s", err)
+				}
 				size += len(followOnMessage)
 				c.ChunkCount++
 			}
 
 			if err := w.Close(); err != nil {
+				zap.S().Warnf("problem closing writer; exiting write goroutine: %s", err)
 				return
 			}
 			if c.ChunkCount%100 == 0 {
-				zap.S().Infof("chunks sent to client '%s': %d", c.ID, c.ChunkCount)
+				zap.S().Debugf("chunks sent to client '%s': %d", c.ID, c.ChunkCount)
 			}
 		case <-ticker.C:
 			// TODO investigate write deadlines
-			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.Conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				zap.S().Warnf("problem setting write deadline after timeout: %s", err)
+			}
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				zap.S().Debugf("problem sending ping after reaching WriteDeadline: %s", err)
 				return
 			}
-		case <-closed:
-			return
 		}
 	}
 }
