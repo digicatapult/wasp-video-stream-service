@@ -56,6 +56,8 @@ func NewController(msgChan chan []byte) *Controller {
 	}
 
 	go c.ForwardMessages()
+
+	return c
 }
 
 // HandleWs handles a websocket connection and records a client instance
@@ -83,7 +85,20 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 	go client.readPump()
 }
 
+// ForwardMessages will iterate messages and send them  to connected clients
 func (c *Controller) ForwardMessages() {
+	for {
+		select {
+		case msg, ok := <-c.msgChan:
+			if !ok {
+				zap.S().Warn("bad message channel, returning...")
+				return
+			}
+			for _, client := range c.clients {
+				client.Messages <- msg
+			}
+		}
+	}
 }
 
 // WsHandlerClient defines a client connection and message transfer
