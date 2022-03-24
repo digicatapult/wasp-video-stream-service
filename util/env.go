@@ -14,6 +14,9 @@ const (
 
 	// LogLevelKey defines the environment variable key for LogLevel
 	LogLevelKey = "LOG_LEVEL"
+
+	// HostAddressKey defines the environment variable key for HostAddress
+	HostAddressKey = "HOST_ADDRESS"
 )
 
 // GetEnv will lookup a environment variable or return the default
