@@ -1,63 +1,58 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <title>MSE Demo</title>
 </head>
 <body>
-<video id="video" autoPlay="true" muted="muted"></video>
-<script>
-function ready() {
-    const video = document.getElementById("video");
-    const ws = new WebSocket('ws://localhost:9999/ws');
-    const mimeCodec = 'video/mp4; codecs="avc1.64001e, mp4a.40.2"';
-    const arrayOfBlobs = [];
+<h1>MSE Demo</h1>
+<div>
+    <video controls width="80%"></video>
+</div>
+<script type="text/javascript">
+    const websocket = new WebSocket('ws://localhost:9999/ws');
+    websocket.binaryType = 'arraybuffer';
+
     const mediaSource = new MediaSource();
+    const mimeCodec = 'video/mp4; codecs="avc1.64001e, mp4a.40.2"'
+    let buffer;
+    const queue = [];
 
-    const url = URL.createObjectURL(mediaSource);
-    video.src = url;
+    const video = document.querySelector('video');
+    video.src = window.URL.createObjectURL(mediaSource);
 
-    let sourceBuffer = null;
-    mediaSource.addEventListener("sourceopen", function () {
+    mediaSource.addEventListener('sourceopen', function(e) {
         video.play();
 
-        sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
-        sourceBuffer.addEventListener("update", appendToSourceBuffer);
-    });
+        buffer = mediaSource.addSourceBuffer(mimeCodec);
 
-    function appendToSourceBuffer() {
-        if (arrayOfBlobs.length > 0 && !arrayOfBlobs.updating) {
-            arrayOfBlobs.appendBuffer(arrayOfBlobs.shift());
+        buffer.addEventListener('updatestart', function(e) { console.log('updatestart: ' + mediaSource.readyState); });
+        buffer.addEventListener('update', function(e) { console.log('update: ' + mediaSource.readyState); });
+        buffer.addEventListener('updateend', function(e) { console.log('updateend: ' + mediaSource.readyState); });
+        buffer.addEventListener('error', function(e) { console.log('error: ' + mediaSource.readyState); });
+        buffer.addEventListener('abort', function(e) { console.log('abort: ' + mediaSource.readyState); });
+
+        buffer.addEventListener('update', function() {
+            if (queue.length > 0 && !buffer.updating) {
+                buffer.appendBuffer(queue.shift());
+            }
+        });
+    }, false);
+
+    mediaSource.addEventListener('sourceopen', function(e) { console.log('sourceopen: ' + mediaSource.readyState); });
+    mediaSource.addEventListener('sourceended', function(e) { console.log('sourceended: ' + mediaSource.readyState); });
+    mediaSource.addEventListener('sourceclose', function(e) { console.log('sourceclose: ' + mediaSource.readyState); });
+    mediaSource.addEventListener('error', function(e) { console.log('error: ' + mediaSource.readyState); });
+
+    websocket.addEventListener('message', function(e) {
+        if (typeof e.data !== 'string') {
+            if (buffer.updating || queue.length > 0) {
+                queue.push(e.data);
+            } else {
+                buffer.appendBuffer(e.data);
+            }
         }
-    }
-
-    ws.onopen = () => {
-        ws.onmessage = (event) => {
-            const videoUrl = window.URL.createObjectURL(event.data);
-
-            get(videoUrl, (buffer) => {
-                if (buffer && buffer.length > 0) {
-                    arrayOfBlobs.append(buffer);
-
-                    appendToSourceBuffer();
-                }
-            });
-        }
-    }
-
-    function get(url, callback) {
-        const xhr = new XMLHttpRequest();
-        xhr.open('get', url, true);
-        xhr.responseType = 'arraybuffer';
-        xhr.send();
-
-        xhr.onload = () => {
-            callback(xhr.response);
-        };
-    }
-}
-
-window.addEventListener("DOMContentLoaded", function () {
-    console.log("Loaded");
-    ready();
-});
+    }, false);
 </script>
 </body>
 </html>
