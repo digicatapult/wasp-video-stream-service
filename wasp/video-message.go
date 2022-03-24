@@ -4,9 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"github.com/Shopify/sarama"
-	"go.uber.org/zap"
-
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // Message defines the video message structure
