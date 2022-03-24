@@ -35,3 +35,10 @@ make cleanbuild
 - `ENV` (default: "development") - `development|production`
 - `LOG_LEVEL` (default: "debug") - `debug|info|warn|error|fatal`
 - `HOST_ADDRESS` (default: "localhost:9999")
+
+### Example
+
+```
+$ make build
+$ HOST_ADDRESS=localhost:8080 ./wasp-video-stream-service
+```

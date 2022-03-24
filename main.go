@@ -31,6 +31,7 @@ func main() {
 
 	wsController := websocket.NewController(msgChan)
 
+	zap.S().Infof("Starting server on: '%s'", hostAddress)
 	srv := &http.Server{Addr: hostAddress}
 
 	router := mux.NewRouter()
