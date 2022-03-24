@@ -42,7 +42,13 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func HandleWs(w http.ResponseWriter, r *http.Request) {
+// Controller defines a websocket controller for managing websocket connections
+type Controller struct {
+	clients []*WsHandlerClient
+}
+
+// HandleWs handles a websocket connection and records a client instance
+func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		zap.S().With("error", err).Error("Failed upgrading to websocket connection in wsHandler")
@@ -55,10 +61,10 @@ func HandleWs(w http.ResponseWriter, r *http.Request) {
 		Conn:       conn,
 		UserAgent:  r.UserAgent(),
 		RemoteAddr: r.Header.Get("X-Forwarded-For"),
+		ChunkCount: 0,
 	}
 
-	clients = append(clients, client)
-	chunkCount[client.ID] = 0
+	c.clients = append(c.clients, client)
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
@@ -68,20 +74,15 @@ func HandleWs(w http.ResponseWriter, r *http.Request) {
 	go client.readPump()
 }
 
+// WsHandlerClient defines a client connection and message transfer
 type WsHandlerClient struct {
 	Messages   chan []byte
 	Conn       *websocket.Conn
 	UserAgent  string // r.UserAgent()
 	RemoteAddr string // r.Header.Get("X-Forwarded-For")
 	ID         string
+	ChunkCount int
 }
-
-var (
-	// videoChunks chan []byte
-	clients    []*WsHandlerClient
-	close      chan bool
-	chunkCount map[string]int
-)
 
 // readPump pumps messages from the websocket connection to the hub.
 //
@@ -128,40 +129,42 @@ func (c *WsHandlerClient) writePump(closed <-chan struct{}) {
 	for {
 		select {
 		case chunk := <-c.Messages:
+			// TODO investigate write deadlines
 			// c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			// if !ok {
 			// 	// The hub closed the channel.
 			// 	c.Conn.WriteMessage(websocket.CloseMessage, []byte{})
 			// 	return
 			// }
-			// zap.S().Info("sending stuff")
+
 			w, err := c.Conn.NextWriter(websocket.BinaryMessage)
 			if err != nil {
 				return
 			}
 
 			w.Write(chunk)
-			chunkCount[c.ID]++
+			c.ChunkCount++
 
 			size := len(chunk)
 
 			// Add queued chunks to the current websocket message, without delimiter.
 			n := len(c.Messages)
 			for i := 0; i < n; i++ {
-				zap.S().Info("writing follow up")
+				zap.S().Debug("writing follow up")
 				followOnMessage := <-c.Messages
 				w.Write(followOnMessage)
 				size += len(followOnMessage)
-				chunkCount[c.ID]++
+				c.ChunkCount++
 			}
 
 			if err := w.Close(); err != nil {
 				return
 			}
-			if chunkCount[c.ID]%100 == 0 {
-				zap.S().Infof("chunks sent to client '%s': %d", c.ID, chunkCount[c.ID])
+			if c.ChunkCount%100 == 0 {
+				zap.S().Infof("chunks sent to client '%s': %d", c.ID, c.ChunkCount)
 			}
 		case <-ticker.C:
+			// TODO investigate write deadlines
 			c.Conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.Conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
