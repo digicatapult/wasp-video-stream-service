@@ -45,6 +45,17 @@ var upgrader = websocket.Upgrader{
 // Controller defines a websocket controller for managing websocket connections
 type Controller struct {
 	clients []*WsHandlerClient
+	msgChan chan []byte
+}
+
+// NewController will initialise a new instance
+func NewController(msgChan chan []byte) *Controller {
+	c := &Controller{
+		clients: []*WsHandlerClient{},
+		msgChan: msgChan,
+	}
+
+	go c.ForwardMessages()
 }
 
 // HandleWs handles a websocket connection and records a client instance
@@ -70,6 +81,9 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
+}
+
+func (c *Controller) ForwardMessages() {
 }
 
 // WsHandlerClient defines a client connection and message transfer
