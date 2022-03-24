@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/Shopify/sarama v1.32.0
+	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/pkg/errors v0.9.1
 	github.com/satori/go.uuid v1.2.0
