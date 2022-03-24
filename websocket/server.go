@@ -68,8 +68,6 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
-	// TODO add close channel
-	// go client.writePump(app.closed)
 	go client.writePump()
 	go client.readPump()
 }
@@ -91,7 +89,7 @@ type WsHandlerClient struct {
 // reads from this goroutine.
 func (c *WsHandlerClient) readPump() {
 	defer func() {
-		// close when we leave this function
+		// close channels when we leave this function
 		// (in the event of an error or connection closing)
 		close(c.Messages)
 		c.Conn.Close()
