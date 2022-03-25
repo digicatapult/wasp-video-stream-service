@@ -8,6 +8,7 @@ package websocket
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -44,15 +45,17 @@ var upgrader = websocket.Upgrader{
 
 // Controller defines a websocket controller for managing websocket connections
 type Controller struct {
-	clients []*WsHandlerClient
-	msgChan chan []byte
+	clients    map[string]*WsHandlerClient
+	clientLock *sync.RWMutex
+	msgChan    chan []byte
 }
 
 // NewController will initialise a new instance
 func NewController(msgChan chan []byte) *Controller {
 	c := &Controller{
-		clients: []*WsHandlerClient{},
-		msgChan: msgChan,
+		clients:    map[string]*WsHandlerClient{},
+		clientLock: &sync.RWMutex{},
+		msgChan:    msgChan,
 	}
 
 	go c.ForwardMessages()
@@ -77,7 +80,22 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 		ChunkCount: 0,
 	}
 
-	c.clients = append(c.clients, client)
+	client.Conn.SetCloseHandler(func(code int, text string) error {
+		c.clientLock.Lock()
+		delete(c.clients, client.ID)
+		c.clientLock.Unlock()
+
+		zap.S().Infof("client %s disconnected", client.ID)
+
+		close(client.Messages)
+		return nil
+	})
+
+	c.clientLock.Lock()
+	c.clients[client.ID] = client
+	c.clientLock.Unlock()
+	zap.S().Infof("client added: %s", client.ID)
+	zap.S().Debugf("current clients: %#v", c.clients)
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
@@ -88,9 +106,11 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 // ForwardMessages will iterate messages and send them  to connected clients
 func (c *Controller) ForwardMessages() {
 	for msg := range c.msgChan {
+		c.clientLock.RLock()
 		for _, client := range c.clients {
 			client.Messages <- msg
 		}
+		c.clientLock.RUnlock()
 	}
 }
 
@@ -113,7 +133,6 @@ func (c *WsHandlerClient) readPump() {
 	defer func() {
 		// close channels when we leave this function
 		// (in the event of an error or connection closing)
-		close(c.Messages)
 		c.Conn.Close()
 	}()
 	c.Conn.SetReadLimit(maxMessageSize)
