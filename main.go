@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -52,7 +51,7 @@ func main() {
 
 	defer func() {
 		if err := consumer.Close(); err != nil {
-			log.Fatalln(err)
+			zap.S().Fatalf("consumer error %s", err)
 		}
 	}()
 
@@ -63,7 +62,7 @@ func main() {
 
 	defer func() {
 		if err := partitionConsumer.Close(); err != nil {
-			log.Fatalln(err)
+			zap.S().Fatalf("msgUnmarshalled error %s", err)
 		}
 	}()
 
@@ -76,13 +75,13 @@ ConsumerLoop:
 	for {
 		select {
 		case msg := <-partitionConsumer.Messages():
-			log.Printf("Consumed message offset %d\n", msg.Offset)
+			zap.S().Debugf("Consumed message offset %d", msg.Offset)
 
 			msgUnmarshalled, err := wasp.VideoMessage(msg)
 			if err != nil {
 				zap.S().Fatalf("msgUnmarshalled error %s", err)
 			}
-			log.Printf("Consumed message payload %s\n", msgUnmarshalled)
+			zap.S().Debugf("Consumed message payload %s", msgUnmarshalled)
 
 			consumed++
 		case <-signals:
@@ -90,5 +89,5 @@ ConsumerLoop:
 		}
 	}
 
-	log.Printf("Consumed: %d\n", consumed)
+	zap.S().Debugf("Consumed: %d", consumed)
 }
