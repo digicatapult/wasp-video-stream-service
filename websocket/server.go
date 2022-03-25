@@ -8,6 +8,7 @@ package websocket
 
 import (
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -44,15 +45,17 @@ var upgrader = websocket.Upgrader{
 
 // Controller defines a websocket controller for managing websocket connections
 type Controller struct {
-	clients []*WsHandlerClient
-	msgChan chan []byte
+	clients    map[string]*WsHandlerClient
+	clientLock *sync.RWMutex
+	msgChan    chan []byte
 }
 
 // NewController will initialise a new instance
 func NewController(msgChan chan []byte) *Controller {
 	c := &Controller{
-		clients: []*WsHandlerClient{},
-		msgChan: msgChan,
+		clients:    map[string]*WsHandlerClient{},
+		clientLock: &sync.RWMutex{},
+		msgChan:    msgChan,
 	}
 
 	go c.ForwardMessages()
@@ -77,7 +80,17 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 		ChunkCount: 0,
 	}
 
-	c.clients = append(c.clients, client)
+	client.Conn.SetCloseHandler(func(code int, text string) error {
+		c.clientLock.Lock()
+		defer c.clientLock.Unlock()
+		delete(c.clients, client.ID)
+
+		return nil
+	})
+
+	c.clientLock.Lock()
+	c.clients[client.ID] = client
+	c.clientLock.Unlock()
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
