@@ -1,6 +1,6 @@
 <html>
   <head>
-    <script>
+    <!-- <script>
       function ready() {
         console.log("ready");
         const videoTag = document.getElementById("my-video");
@@ -59,10 +59,77 @@
         console.log("All assets are loaded");
         ready();
       });
-    </script>
+    </script> -->
   </head>
   <body>
     <h1>Hello world</h1>
-    <video id="my-video"></video>
+    <video id="testVid" controls></video>
+    <script>
+      var video = document.querySelector('#testVid');
+
+      var assetURL = 'out2.mp4';
+      // Need to be specific for Blink regarding codecs
+      // ./mp4info frag_bunny.mp4 | grep Codec
+      var mimeCodec = 'video/mp4; codecs="avc1.42C01F, mp4a.40.2"';
+
+      // Video10 codec: 
+      //var mimeCodec = 'video/mp4; codecs="avc1.64001F, mp4a.40.2"';
+
+//var mimeCodec = 'video/mp4; codecs="oV"';
+      //var mimeCodec = 'video/webm; codecs="vp8"';
+    
+
+      var mediaSource = new MediaSource;
+        //console.log(mediaSource.readyState); // closed
+        video.src = URL.createObjectURL(mediaSource);
+        mediaSource.addEventListener('sourceopen', sourceOpen);
+    
+      /*if ('MediaSource' in window && MediaSource.isTypeSupported(mimeCodec)) {
+        var mediaSource = new MediaSource;
+        //console.log(mediaSource.readyState); // closed
+        video.src = URL.createObjectURL(mediaSource);
+        mediaSource.addEventListener('sourceopen', sourceOpen);
+      } else {
+        console.error('Unsupported MIME type or codec: ', mimeCodec);
+      }*/
+
+      function sourceOpen (_) {
+        //console.log(this.readyState); // open
+        var mediaSource = this;
+        var sourceBuffer = mediaSource.addSourceBuffer(mimeCodec);
+        console.log("Mimecodec", mimeCodec);
+        fetchAB(assetURL, function (buf) {
+          sourceBuffer.addEventListener('updateend', function (_) {
+            mediaSource.endOfStream();
+            video.play();
+            //var resp = video.play();
+
+// if (resp!== undefined) {
+//     resp.then(_ => {
+//         // autoplay starts!
+//     }).catch(error => {
+//        //show error
+//     });
+// }
+
+            
+            console.log(mediaSource.readyState); // ended
+          });
+          sourceBuffer.appendBuffer(buf);
+        });
+      };
+
+      function fetchAB (url, cb) {
+        console.log(url);
+        var xhr = new XMLHttpRequest;
+        xhr.open('get', url);
+        xhr.responseType = 'arraybuffer';
+        xhr.onload = function () {
+          cb(xhr.response);
+        };
+        xhr.send();
+      };
+    </script>
   </body>
+
 </html>
