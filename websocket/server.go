@@ -87,16 +87,9 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 
 // ForwardMessages will iterate messages and send them  to connected clients
 func (c *Controller) ForwardMessages() {
-	for {
-		select {
-		case msg, ok := <-c.msgChan:
-			if !ok {
-				zap.S().Warn("bad message channel, returning...")
-				return
-			}
-			for _, client := range c.clients {
-				client.Messages <- msg
-			}
+	for msg := range c.msgChan {
+		for _, client := range c.clients {
+			client.Messages <- msg
 		}
 	}
 }
