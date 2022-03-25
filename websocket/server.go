@@ -82,11 +82,12 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 
 	client.Conn.SetCloseHandler(func(code int, text string) error {
 		c.clientLock.Lock()
-		defer c.clientLock.Unlock()
 		delete(c.clients, client.ID)
+		c.clientLock.Unlock()
 
-		zap.S().Infof("client %s disconnected")
+		zap.S().Infof("client %s disconnected", client.ID)
 
+		close(client.Messages)
 		return nil
 	})
 
@@ -103,9 +104,11 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 // ForwardMessages will iterate messages and send them  to connected clients
 func (c *Controller) ForwardMessages() {
 	for msg := range c.msgChan {
+		c.clientLock.RLock()
 		for _, client := range c.clients {
 			client.Messages <- msg
 		}
+		c.clientLock.RUnlock()
 	}
 }
 
@@ -128,7 +131,6 @@ func (c *WsHandlerClient) readPump() {
 	defer func() {
 		// close channels when we leave this function
 		// (in the event of an error or connection closing)
-		close(c.Messages)
 		c.Conn.Close()
 	}()
 	c.Conn.SetReadLimit(maxMessageSize)
