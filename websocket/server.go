@@ -85,6 +85,8 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 		defer c.clientLock.Unlock()
 		delete(c.clients, client.ID)
 
+		zap.S().Infof("client %s disconnected")
+
 		return nil
 	})
 
