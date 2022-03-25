@@ -94,8 +94,8 @@ func (c *Controller) HandleWs(w http.ResponseWriter, r *http.Request) {
 	c.clientLock.Lock()
 	c.clients[client.ID] = client
 	c.clientLock.Unlock()
-	zap.S().Info("client added: %s", client.ID)
-	zap.S().Debug("current clients: %#v", c.clients)
+	zap.S().Infof("client added: %s", client.ID)
+	zap.S().Debugf("current clients: %#v", c.clients)
 
 	// Allow collection of memory referenced by the caller by doing all work in
 	// new goroutines.
