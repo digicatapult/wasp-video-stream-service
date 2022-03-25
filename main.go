@@ -75,13 +75,13 @@ ConsumerLoop:
 	for {
 		select {
 		case msg := <-partitionConsumer.Messages():
-			zap.S().Debug("Consumed message offset %d", msg.Offset)
+			zap.S().Debugf("Consumed message offset %d", msg.Offset)
 
 			msgUnmarshalled, err := wasp.VideoMessage(msg)
 			if err != nil {
 				zap.S().Fatalf("msgUnmarshalled error %s", err)
 			}
-			zap.S().Debug("Consumed message payload %s", msgUnmarshalled)
+			zap.S().Debugf("Consumed message payload %s", msgUnmarshalled)
 
 			consumed++
 		case <-signals:
@@ -89,5 +89,5 @@ ConsumerLoop:
 		}
 	}
 
-	zap.S().Debug("Consumed: %d", consumed)
+	zap.S().Debugf("Consumed: %d", consumed)
 }
