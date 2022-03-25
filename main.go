@@ -81,7 +81,8 @@ ConsumerLoop:
 			if err != nil {
 				zap.S().Fatalf("msgUnmarshalled error %s", err)
 			}
-			zap.S().Debugf("Consumed message payload %s", msgUnmarshalled)
+
+			msgChan <- msgUnmarshalled
 
 			consumed++
 		case <-signals:
