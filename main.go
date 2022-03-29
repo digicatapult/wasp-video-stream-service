@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path"
-	"regexp"
 	"strings"
 
 	"github.com/Shopify/sarama"
@@ -75,7 +73,8 @@ func streamHandler(response http.ResponseWriter, request *http.Request) {
 	segName, ok := vars["segName"]
 	// zap.S().Info(segName)
 	if !ok {
-		writePlaylist(response, "http://localhost:9999/stream_test")
+		// writePlaylist(response, "http://localhost:9999/stream_test")
+		response.Write(playlist.Print())
 		return
 	}
 
@@ -87,28 +86,9 @@ func streamHandler(response http.ResponseWriter, request *http.Request) {
 	response.Write(seg)
 }
 
-func writePlaylist(w http.ResponseWriter, base string) {
-	for _, l := range m3u8Playlist {
-
-		match, err := regexp.Match("output[0-9]+.ts", []byte(l))
-		if err != nil {
-			zap.S().Errorf("problem checking playlist lines: %s", err)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-
-		if match {
-			l = path.Join(base, l)
-		}
-
-		w.Write([]byte(l))
-		w.Write([]byte("\n"))
-	}
-}
-
 var (
-	m3u8Playlist = []string{}
-	mpegTsStore  = map[string][]byte{}
+	playlist    = &wasp.Playlist{}
+	mpegTsStore = map[string][]byte{}
 )
 
 func storeVideoSegments(msgChan chan *wasp.Message) {
@@ -117,25 +97,13 @@ func storeVideoSegments(msgChan chan *wasp.Message) {
 
 		switch p.Type {
 		case "meta":
-			if len(m3u8Playlist) > 0 {
-				newlines := getLastLines(msg.Payload.Data)
-				// zap.S().Infof("adding new lines to playlist: '%s'", newlines)
-				// TODO: check file exists first
-				m3u8Playlist = append(m3u8Playlist, newlines...)
-				continue
-			}
-			m3u8Playlist = strings.Split(string(msg.Payload.Data), "\n")
+			playlist.UpdatePlaylist(`http://localhost:9999/stream_test`, p.Data)
 		case "data":
 			mpegTsStore[p.Filename] = p.Data
 		default:
 			zap.S().Warnf("unknown message payload type '%s'", p.Type)
 		}
 	}
-}
-
-func getLastLines(data []byte) []string {
-	lines := strings.Split(string(data), "\n")
-	return lines[len(lines)-3 : len(lines)-1]
 }
 
 func consumeVideoMessages(kafkaBrokers []string, inTopicName string, msgChan chan *wasp.Message) {
