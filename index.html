@@ -1,84 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>MSE Demo</title>
-  </head>
-  <body>
-    <h1>MSE Demo</h1>
-    <div>
-      <video controls width="80%"></video>
-    </div>
-    <script type="text/javascript">
-      const websocket = new WebSocket("ws://localhost:9999/ws");
-      websocket.binaryType = "arraybuffer";
-
-      const mediaSource = new MediaSource();
-      const mimeCodec = 'video/mp4; codecs="avc1.64001e, mp4a.40.2"';
-      let buffer;
-      const queue = [];
-
-      const video = document.querySelector("video");
-      video.src = window.URL.createObjectURL(mediaSource);
-
-      mediaSource.addEventListener(
-        "sourceopen",
-        function (e) {
-          video.play();
-
-          buffer = mediaSource.addSourceBuffer(mimeCodec);
-
-          buffer.addEventListener("updatestart", function (e) {
-            console.log("updatestart: " + mediaSource.readyState);
-          });
-          buffer.addEventListener("update", function (e) {
-            console.log("update: " + mediaSource.readyState);
-          });
-          buffer.addEventListener("updateend", function (e) {
-            console.log("updateend: " + mediaSource.readyState);
-          });
-          buffer.addEventListener("error", function (e) {
-            console.log("error: " + mediaSource.readyState);
-          });
-          buffer.addEventListener("abort", function (e) {
-            console.log("abort: " + mediaSource.readyState);
-          });
-
-          buffer.addEventListener("update", function () {
-            if (queue.length > 0 && !buffer.updating) {
-              buffer.appendBuffer(queue.shift());
-            }
-          });
-        },
-        false
-      );
-
-      mediaSource.addEventListener("sourceopen", function (e) {
-        console.log("sourceopen: " + mediaSource.readyState);
-      });
-      mediaSource.addEventListener("sourceended", function (e) {
-        console.log("sourceended: " + mediaSource.readyState);
-      });
-      mediaSource.addEventListener("sourceclose", function (e) {
-        console.log("sourceclose: " + mediaSource.readyState);
-      });
-      mediaSource.addEventListener("error", function (e) {
-        console.log("error: " + mediaSource.readyState);
-      });
-
-      websocket.addEventListener(
-        "message",
-        function (e) {
-          if (typeof e.data !== "string") {
-            if (buffer.updating || queue.length > 0) {
-              queue.push(e.data);
-            } else {
-              buffer.appendBuffer(e.data);
-            }
-          }
-        },
-        false
-      );
-    </script>
-  </body>
+<head>
+<meta charset="UTF-8" />
+<title>MSE Demo</title>
+</head>
+<body>
+<h1>MSE Demo</h1>
+<div>
+  <video autoplay controls width="80%"></video>
+</div>
+<script type="text/javascript" src="main.js"></script>
+</body>
 </html>

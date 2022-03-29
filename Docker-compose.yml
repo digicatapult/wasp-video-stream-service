@@ -28,7 +28,7 @@ services:
     image: "docker.io/bitnami/kafka:2-debian-10"
     command: /bin/sh -c "
       sleep 20 &&
-      kafka-topics.sh --bootstrap-server kafka:9093 --create --topic video --partitions 1 --replication-factor 1 --if-not-exists"
+      kafka-topics.sh --bootstrap-server kafka:9093 --create --topic video --partitions 1 --replication-factor 1 --config max.message.bytes=2048576 --if-not-exists"
     depends_on:
       - zookeeper
       - kafka
