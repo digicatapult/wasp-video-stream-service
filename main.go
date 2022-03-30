@@ -12,7 +12,6 @@ import (
 
 	"github.com/digicatapult/wasp-video-stream-service/util"
 	"github.com/digicatapult/wasp-video-stream-service/wasp"
-	"github.com/digicatapult/wasp-video-stream-service/websocket"
 )
 
 func main() {
@@ -25,16 +24,21 @@ func main() {
 
 	sarama.Logger = util.SaramaZapLogger{}
 
-	// TODO define best size for this
-	msgChan := make(chan []byte, 100000)
-
-	wsController := websocket.NewController(msgChan)
-
-	zap.S().Infof("Starting server on: '%s'", hostAddress)
 	srv := &http.Server{Addr: hostAddress}
-
 	router := mux.NewRouter()
-	router.HandleFunc(`/ws`, wsController.HandleWs)
+
+	msgChan := make(chan *wasp.Message)
+
+	router.HandleFunc("/{streamID}", streamHandler).Methods("GET")
+	router.HandleFunc("/{streamID}/{segName:output[0-9]+.ts}", streamHandler).Methods("GET")
+
+	// TODO define best size for this
+	// msgChan := make(chan []byte, 100000)
+	// wsController := websocket.NewController(msgChan)
+	// zap.S().Infof("Starting server on: '%s'", hostAddress)
+	// srv := &http.Server{Addr: hostAddress}
+	// router := mux.NewRouter()
+	// router.HandleFunc(`/ws`, wsController.HandleWs)
 
 	srv.Handler = router
 	go func() {
@@ -44,6 +48,65 @@ func main() {
 		zap.S().Info("Exiting http.Server")
 	}()
 
+	go func() {
+		stop := make(chan os.Signal, 1)
+		signal.Notify(stop, os.Interrupt)
+
+		<-stop
+		zap.S().Info("closing down")
+		os.Exit(0)
+	}()
+
+	go consumeVideoMessages(kafkaBrokers, inTopicName, msgChan)
+	storeVideoSegments(msgChan)
+}
+
+func streamHandler(response http.ResponseWriter, request *http.Request) {
+	vars := mux.Vars(request)
+
+	// streamID, err := strconv.Atoi(vars["streamID"])
+	// if err != nil {
+	// 	response.WriteHeader(http.StatusNotFound)
+	// 	return
+	// }
+
+	segName, ok := vars["segName"]
+	// zap.S().Info(segName)
+	if !ok {
+		// writePlaylist(response, "http://localhost:9999/stream_test")
+		response.Write(playlist.Print())
+		return
+	}
+
+	seg, ok := mpegTsStore[segName]
+	if !ok {
+		response.WriteHeader(http.StatusNotFound)
+		return
+	}
+	response.Write(seg)
+}
+
+var (
+	playlist    = &wasp.Playlist{}
+	mpegTsStore = map[string][]byte{}
+)
+
+func storeVideoSegments(msgChan chan *wasp.Message) {
+	for msg := range msgChan {
+		p := msg.Payload
+
+		switch p.Type {
+		case "meta":
+			playlist.UpdatePlaylist(`http://localhost:9999/stream_test`, p.Data)
+		case "data":
+			mpegTsStore[p.Filename] = p.Data
+		default:
+			zap.S().Warnf("unknown message payload type '%s'", p.Type)
+		}
+	}
+}
+
+func consumeVideoMessages(kafkaBrokers []string, inTopicName string, msgChan chan *wasp.Message) {
 	consumer, err := sarama.NewConsumer(kafkaBrokers, nil)
 	if err != nil {
 		panic(err)
@@ -75,7 +138,7 @@ ConsumerLoop:
 	for {
 		select {
 		case msg := <-partitionConsumer.Messages():
-			zap.S().Debugf("Consumed message offset %d", msg.Offset)
+			// zap.S().Debugf("Consumed message offset %d", msg.Offset)
 
 			msgUnmarshalled, err := wasp.VideoMessage(msg)
 			if err != nil {
