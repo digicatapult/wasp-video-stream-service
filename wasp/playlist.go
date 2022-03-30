@@ -10,10 +10,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Playlist defines an HLS playlist and the m3u8 format and operations
 type Playlist struct {
 	m3u8Playlist []string
 }
 
+// UpdatePlaylist will take a playlist update and modify the paths to match the local server
 func (p *Playlist) UpdatePlaylist(base string, data []byte) {
 	if len(p.m3u8Playlist) == 0 {
 		lines := strings.Split(string(data), "\n")[5:]
@@ -32,6 +34,7 @@ func (p *Playlist) UpdatePlaylist(base string, data []byte) {
 	p.m3u8Playlist = append(p.m3u8Playlist, toAdd...)
 }
 
+// Print will compile the playlist and produce an outputtable playlist
 func (p *Playlist) Print() []byte {
 	headers := []string{
 		"#EXTM3U",
@@ -44,11 +47,6 @@ func (p *Playlist) Print() []byte {
 	return []byte(strings.Join(output, "\n"))
 }
 
-func getHeaderLines(data []byte) []string {
-	lines := strings.Split(string(data), "\n")
-	return lines[:4]
-}
-
 func getLastLines(data []byte) []string {
 	lines := strings.Split(string(data), "\n")
 	return lines[len(lines)-3 : len(lines)-1]
@@ -56,7 +54,7 @@ func getLastLines(data []byte) []string {
 
 func setBasePath(base string, lines []string) []string {
 	newlines := []string{}
-	baseUrl, err := url.Parse(base)
+	baseURL, err := url.Parse(base)
 	if err != nil {
 		zap.S().Errorf("problem parsing base lines: %s", err)
 		return []string{}
@@ -68,7 +66,7 @@ func setBasePath(base string, lines []string) []string {
 			return []string{}
 		}
 		if match {
-			u := baseUrl
+			u := baseURL
 			u.Path = path.Join(u.Path, l)
 			l = u.String()
 		}
